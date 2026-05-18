@@ -1,0 +1,20 @@
+[project]
+name = "fastapiproject"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "alembic>=1.18.4",
+    "asyncpg>=0.31.0",
+    "collection>=0.1.6",
+    "fastapi>=0.136.1",
+    "fastapi-users[sqlalchemy]>=15.0.5",
+    "imagekitio[aiohttp]>=5.4.0",
+    "psycopg2-binary>=2.9.12",
+    "python-dotenv>=1.2.2",
+    "streamlit>=1.57.0",
+    "streamlit-cookies-manager>=0.2.0",
+    "uvicorn[standard]>=0.46.0",
+]
