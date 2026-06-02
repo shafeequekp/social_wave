@@ -317,104 +317,90 @@ def feed_page():
                                 )
                             )
 
-
-
-
-            # caption = post.get('caption', '')
-            # if post['file_type'] == 'image':
-            #     uniform_url = create_transformed_url(post['url'], "", caption)
-            #     st.image(uniform_url, width=300)
-            # else:
-            #     # For videos: specify only height to maintain aspect ratio + caption overlay
-            #     uniform_video_url = create_transformed_url(post['url'], "w-400,h-200,cm-pad_resize,bg-blurred")
-            #     st.video(uniform_video_url, width=300)
-            #     st.caption(caption)
-            #
-            # st.markdown("")  # Space between posts
-            #
-            #
-            #
-            # # Like + Comment Section
-            # col1, col2 = st.columns([1, 3])
-            #
-            # with col1:
-            #     likes_count = post.get("likes", 0)
-            #
-            #     st.write(f"❤️ {likes_count} likes")
-            #
-            #     if st.button("Like", key=f"like_{post['id']}"):
-            #
-            #         like_response = requests.post(
-            #             "http://localhost:8000/like",
-            #             params={"post_id": post["id"]},
-            #             headers=get_headers()
-            #         )
-            #
-            #         if like_response.status_code == 200:
-            #             st.success("Liked!")
-            #             st.rerun()
-            #
-            #         else:
-            #             st.error(
-            #                 like_response.json().get(
-            #                     "detail",
-            #                     "Failed to like"
-            #                 )
-            #             )
-            #
-            # with col2:
-            #
-            #     st.write("💬 Comments")
-            #
-            #     comments = post.get("comments", [])
-            #
-            #     if comments:
-            #
-            #         for comment in comments:
-            #             st.write(
-            #                 f"🗨️ {comment['text']}"
-            #             )
-            #
-            #     else:
-            #         st.caption("No comments yet")
-            #
-            #     # Add Comment
-            #     comment_text = st.text_input(
-            #         "Add comment",
-            #         key=f"comment_input_{post['id']}"
-            #     )
-            #
-            #     if st.button(
-            #             "Post Comment",
-            #             key=f"comment_btn_{post['id']}"
-            #     ):
-            #
-            #         if comment_text.strip():
-            #
-            #             comment_response = requests.post(
-            #                 "http://localhost:8000/comments",
-            #                 params={
-            #                     "text": comment_text,
-            #                     "post_id": post["id"]
-            #                 },
-            #                 headers=get_headers()
-            #             )
-            #
-            #             if comment_response.status_code == 200:
-            #
-            #                 st.success("Comment added!")
-            #                 st.rerun()
-            #
-            #             else:
-            #
-            #                 st.error(
-            #                     comment_response.json().get(
-            #                         "detail",
-            #                         "Failed to add comment"
-            #                     )
-            #                 )
     else:
         st.error("Failed to load feed")
+
+
+
+
+
+def chatbot_page():
+
+    st.title("🤖 MajallaAI")
+
+    st.caption("Your AI assistant")
+
+    # Store chat history
+    if "chat_messages" not in st.session_state:
+        st.session_state.chat_messages = []
+
+    # Display messages
+    for message in st.session_state.chat_messages:
+
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # Chat input
+    prompt = st.chat_input("Ask MajallaAI anything...")
+
+    if prompt:
+
+        # Add user message
+        st.session_state.chat_messages.append(
+            {
+                "role": "user",
+                "content": prompt
+            }
+        )
+
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # AI response
+        with st.chat_message("assistant"):
+
+            with st.spinner("MajallaAI is thinking..."):
+
+                try:
+
+                    response = requests.post(
+                        "http://localhost:8000/chat",
+                        json={
+                            "message": prompt
+                        },
+                        headers=get_headers()
+                    )
+
+                    if response.status_code == 200:
+
+                        ai_response = response.json().get(
+                            "response",
+                            "No response"
+                        )
+
+                    else:
+
+                        ai_response = "Failed to get response from AI server."
+
+                except Exception as e:
+
+                    ai_response = f"Error: {str(e)}"
+
+                st.markdown(ai_response)
+
+        # Save assistant message
+        st.session_state.chat_messages.append(
+            {
+                "role": "assistant",
+                "content": ai_response
+            }
+        )
+
+
+
+
+
+
 
 
 # Main app logic
@@ -434,9 +420,19 @@ else:
         st.rerun()
 
     st.sidebar.markdown("---")
-    page = st.sidebar.radio("Navigate:", ["🏠 Feed", "📸 Upload"])
+    # page = st.sidebar.radio("Navigate:", ["🏠 Feed", "📸 Upload"])
+    page = st.sidebar.radio(
+        "Navigate:",
+        [
+            "🏠 Feed",
+            "📸 Upload",
+            "🤖 MajallaAI"
+        ]
+    )
 
     if page == "🏠 Feed":
         feed_page()
-    else:
+    elif page == "📸 Upload":
         upload_page()
+    else:
+        chatbot_page()

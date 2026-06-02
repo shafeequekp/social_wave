@@ -308,6 +308,54 @@ async def remove_like(
 
 
 
+from fastapi import APIRouter
+from pydantic import BaseModel
+
+router = APIRouter()
+
+class ChatRequest(BaseModel):
+    message: str
+
+@router.post("/chat")
+async def chat(request: ChatRequest):
+
+    # Call your AI provider here
+    ai_response = "Hello from MajallaAI"
+
+    return {
+        "response": ai_response
+    }
+
+
+
+
+from app.services.ai_services import ask_ai
+
+class ChatRequest(BaseModel):
+    message: str
+
+@app.post("/chat")
+async def chat(request: ChatRequest):
+
+    response = ask_ai(request.message)
+
+    return {
+        "response": response
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # @app.put("/posts/{post_id}")
 # async def update_post(
 #         post_id: str, session: AsyncSession = Depends(get_sync_session),
