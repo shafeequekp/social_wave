@@ -91,6 +91,12 @@ async def upload_file(
         ) as temp_file:
             temp_file_path = temp_file.name
             shutil.copyfileobj(file.file, temp_file)
+        
+        if imagekit is None:
+            raise HTTPException(
+                status_code=500,
+                detail="ImageKit is not configured"
+            )
 
         with open(temp_file_path, "rb") as f:
             upload_result = imagekit.files.upload(

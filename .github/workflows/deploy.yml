@@ -9,6 +9,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    env:
+      IMAGEKIT_PRIVATE_KEY: ${{ secrets.IMAGEKIT_PRIVATE_KEY }}
+      IMAGEKIT_PUBLIC_KEY: ${{ secrets.IMAGEKIT_PUBLIC_KEY }}
+      IMAGEKIT_URL_ENDPOINT: ${{ secrets.IMAGEKIT_URL_ENDPOINT }}
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
