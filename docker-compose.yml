@@ -1,11 +1,12 @@
-
 version: "3.9"
 
 services:
+
   api:
     build: .
     container_name: fastapi_api
     restart: always
+
     expose:
       - "8000"
 
@@ -21,6 +22,25 @@ services:
 
     depends_on:
       - db
+
+  frontend:
+    build: .
+    container_name: streamlit_frontend
+    restart: always
+
+    ports:
+      - "8501:8501"
+
+    command: >
+      uv run streamlit run frontend.py
+      --server.address 0.0.0.0
+      --server.port 8501
+
+    env_file:
+      - .env
+
+    depends_on:
+      - api
 
   db:
     image: postgres:16

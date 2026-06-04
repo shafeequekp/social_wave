@@ -182,37 +182,6 @@ def test_upload_without_auth():
     # pytest.fail("Need to restore overrides")  # Or handle properly
 
 
-# def test_upload_without_auth():
-#     app.dependency_overrides.pop(current_active_user, None)
-
-#     client = TestClient(app)
-
-#     test_image = io.BytesIO(b"fake content")
-#     files = {"file": ("test.jpg", test_image, "image/jpeg")}
-#     data = {"caption": "Test"}
-
-#     response = client.post("/upload", files=files, data=data)
-
-#     assert response.status_code == 401
-
-
-
-# @patch('app.app.imagekit.files.upload')
-# def test_upload_imagekit_failure(mock_upload):
-#     """Test when ImageKit upload fails"""
-#     # Mock ImageKit to return None (failed)
-#     mock_upload.return_value = None
-    
-#     client = TestClient(app)
-    
-#     test_image = io.BytesIO(b"fake content")
-#     files = {"file": ("test.jpg", test_image, "image/jpeg")}
-#     data = {"caption": "Test"}
-    
-#     response = client.post("/upload", files=files, data=data)
-    
-#     assert response.status_code == 400
-#     assert response.json()["detail"] == "Upload failed"
 
 @patch('app.app.imagekit.files.upload')
 def test_upload_imagekit_failure(mock_upload):
