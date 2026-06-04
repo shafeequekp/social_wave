@@ -75,23 +75,19 @@ app.include_router(fastapi_users.get_users_router(UserRead, UserUpdate), prefix=
 
 
 
-
-
-
 @app.post("/upload")
 async def upload_file(
-        file: UploadFile = File(...),
-        caption: str = Form(...),
-        user: User = Depends(current_active_user),
-        session: AsyncSession = Depends(get_sync_session),
+    file: UploadFile = File(...),
+    caption: str = Form(...),
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_sync_session),
 ):
     temp_file_path = None
 
-
     try:
         with tempfile.NamedTemporaryFile(
-                delete=False,
-                suffix=os.path.splitext(file.filename)[1]
+            delete=False,
+            suffix=os.path.splitext(file.filename)[1]
         ) as temp_file:
             temp_file_path = temp_file.name
             shutil.copyfileobj(file.file, temp_file)
@@ -103,33 +99,109 @@ async def upload_file(
                 folder="feeds/",
                 tags=["backend-uploads"]
             )
-        
 
-        if upload_result and upload_result.url:
+        if upload_result is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Upload failed"
+            )
+
+        if upload_result.url:
             post = Post(
                 user_id=user.id,
                 caption=caption,
                 url=upload_result.url,
-                file_type="video" if file.content_type.startswith("video/") else "image",
+                file_type="video"
+                if file.content_type.startswith("video/")
+                else "image",
                 file_name=upload_result.name,
             )
 
             session.add(post)
-            
+
             # await session.commit()
-            # await session.refresh(post)  # avoided this as session auto commits
-        
+            # await session.refresh(post)
+
             return post
 
-        raise HTTPException(status_code=400, detail="Upload failed")
+        raise HTTPException(
+            status_code=400,
+            detail="Upload failed"
+        )
+
+    except HTTPException:
+        raise
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
     finally:
         if temp_file_path and os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
+
         file.file.close()
+
+
+
+
+# @app.post("/upload")
+# async def upload_file(
+#         file: UploadFile = File(...),
+#         caption: str = Form(...),
+#         user: User = Depends(current_active_user),
+#         session: AsyncSession = Depends(get_sync_session),
+# ):
+#     temp_file_path = None
+
+
+#     try:
+#         with tempfile.NamedTemporaryFile(
+#                 delete=False,
+#                 suffix=os.path.splitext(file.filename)[1]
+#         ) as temp_file:
+#             temp_file_path = temp_file.name
+#             shutil.copyfileobj(file.file, temp_file)
+
+#         with open(temp_file_path, "rb") as f:
+#             upload_result = imagekit.files.upload(
+#                 file=f,
+#                 file_name=file.filename,
+#                 folder="feeds/",
+#                 tags=["backend-uploads"]
+#             )
+        
+
+#         if upload_result is None:
+#             raise 
+        
+#         if upload_result and upload_result.url:
+#             post = Post(
+#                 user_id=user.id,
+#                 caption=caption,
+#                 url=upload_result.url,
+#                 file_type="video" if file.content_type.startswith("video/") else "image",
+#                 file_name=upload_result.name,
+#             )
+
+#             session.add(post)
+            
+#             # await session.commit()
+#             # await session.refresh(post)  # avoided this as session auto commits
+        
+#             return post
+
+#         raise HTTPException(status_code=400, detail="Upload failed")
+
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
+
+#     finally:
+#         if temp_file_path and os.path.exists(temp_file_path):
+#             os.unlink(temp_file_path)
+#         file.file.close()
 
 
 @app.get("/feed", response_model=FeedResponseSchema)
