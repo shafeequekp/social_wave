@@ -4,3 +4,9 @@ __pycache__
 venv
 .git
 .venv
+
+
+
+.pytest_cache
+.mypy_cache
+alembic/versions/__pycache__

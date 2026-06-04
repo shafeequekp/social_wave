@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form, Depends, Request
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
@@ -14,27 +14,67 @@ import tempfile
 import time
 
 from app.schemas import PostCreate
-from app.db import Post, get_sync_session, User, Comment, Like
+from app.db import Post, User, Comment, Like, get_sync_session
 from app.images import imagekit
 from app.users import auth_backend, current_active_user, fastapi_users
 from app.schemas import UserCreate, UserRead, UserUpdate, FeedResponseSchema, FeedPostSchema
 from app.middlewares import LoggingMiddleware
+from app.config.settings import settings
+
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     # await create_db_and_tables()
+#     yield
+
+
+
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # await create_db_and_tables()
+    # Create engine with pool settings from Settings
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        **settings.get_db_settings()  # Unpack all pool settings
+    )
+    
+    app.state.engine = engine
+    app.state.session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    
+    print(f"Running in {settings.ENVIRONMENT} mode")
+    print(f"DB Pool size: {settings.DB_POOL_SIZE}")
+    
     yield
-
+    
+    await engine.dispose()
+    print("Database connections closed")
 
 app = FastAPI(lifespan=lifespan)
 
+
+
 # app.add_middleware(LoggingMiddleware)
+
+
+
+
+
 
 app.include_router(fastapi_users.get_auth_router(auth_backend), prefix="/auth/jwt", tags=["auth"])
 app.include_router(fastapi_users.get_register_router(UserRead, UserCreate), prefix="/auth", tags=["auth"])
 app.include_router(fastapi_users.get_reset_password_router(), prefix="/auth", tags=["auth"])
 app.include_router(fastapi_users.get_verify_router(UserRead), prefix="/auth", tags=["auth"])
 app.include_router(fastapi_users.get_users_router(UserRead, UserUpdate), prefix="/users", tags=["users"])
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -46,6 +86,7 @@ async def upload_file(
         session: AsyncSession = Depends(get_sync_session),
 ):
     temp_file_path = None
+
 
     try:
         with tempfile.NamedTemporaryFile(
@@ -62,6 +103,7 @@ async def upload_file(
                 folder="feeds/",
                 tags=["backend-uploads"]
             )
+        
 
         if upload_result and upload_result.url:
             post = Post(
@@ -73,8 +115,10 @@ async def upload_file(
             )
 
             session.add(post)
-            await session.commit()
-            await session.refresh(post)
+            
+            # await session.commit()
+            # await session.refresh(post)  # avoided this as session auto commits
+        
             return post
 
         raise HTTPException(status_code=400, detail="Upload failed")
@@ -106,11 +150,11 @@ async def get_feeds(session: AsyncSession = Depends(get_sync_session), user: Use
         # like_result = await session.execute(select(func.count(Like.id)).where(Like.post_id == post.id))
         like_count = len(post.likes)
 
-        comment_result = await session.execute(
-            select(Comment).where(
-                Comment.post_id == post.id
-            )
-        )
+        # comment_result = await session.execute(
+        #     select(Comment).where(
+        #         Comment.post_id == post.id
+        #     )
+        # )
         # comments = comment_result.scalars().all()
 
         # already_liked_result = await session.execute(
@@ -153,18 +197,22 @@ async def delete_post(
         post_id = uuid.UUID(post_id)
         print(post_id)
 
-        result = await session.execute(select(Post).where(Post.id == post_id))
-        post_obj = result.scalars().one()
+        result = await session.execute(select(Post).where(Post.id == post_id, Post.user_id == user.id))
+        post_obj = result.scalars().first()
 
-        if post_obj.user_id != user.id:
-            raise HTTPException(status_code=400, detail="User not allowed")
+        if not post_obj:
+            raise HTTPException(status_code=404, detail="Post not found")
 
         await session.delete(post_obj)
-        await session.commit()
-    except Exception:
-        raise HTTPException(status_code=404, detail="Post not found")
-
-    return {"success": True, "message": "Deleted successfully"}
+        # await session.commit()
+        return {"success": True, "message": "Deleted successfully"}
+    except ValueError:  # Invalid UUID
+        raise HTTPException(status_code=400, detail="Invalid post ID format")
+    except HTTPException:
+        raise
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 
@@ -180,7 +228,7 @@ async def create_comment(text: str,
 
     comment = Comment(text=text, post_id=post_id, user_id=user.id)
     session.add(comment)
-    await session.commit()
+    # await session.commit()
     return {"success": True, "message": "comment added successfully"}
 
 
@@ -259,8 +307,8 @@ async def add_like(
     )
 
     session.add(like)
-    await session.commit()
-    await session.refresh(like)
+    # await session.commit()
+    # await session.refresh(like)
 
     return {
         "success": True,
@@ -297,7 +345,7 @@ async def remove_like(
         )
 
     await session.delete(like)
-    await session.commit()
+    # await session.commit()
 
     return {
         "success": True,
