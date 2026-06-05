@@ -23,6 +23,7 @@ services:
     depends_on:
       - db
 
+
   frontend:
     build: .
     container_name: streamlit_frontend
