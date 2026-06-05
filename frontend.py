@@ -163,24 +163,58 @@ def feed_page():
             st.markdown("---")
 
             # Header with user, date, and delete button (if owner)
-            col1, col2 = st.columns([4, 1])
+            col1, col2, col3 = st.columns([4, 1, 1])
             with col1:
                 st.markdown(f"**{post['email']}** • {post['created_at'][:10]}")
-            with col2:
-                if post.get('is_owner', False):
-                    if st.button("🗑️", key=f"delete_{post['id']}", help="Delete post"):
-                        # Delete the post
-                        response = requests.delete(f"{host}/posts/{post['id']}", headers=get_headers())
+
+            if post.get("is_owner", False):
+
+                with col2:
+                    if st.button(
+                        "✏️",
+                        key=f"edit_{post['id']}",
+                        help="Edit caption"
+                    ):
+                        st.session_state[
+                            f"editing_post_{post['id']}"
+                        ] = True
+
+                with col3:
+                    if st.button(
+                        "🗑️",
+                        key=f"delete_{post['id']}",
+                        help="Delete post"
+                    ):
+                        response = requests.delete(
+                            f"{host}/posts/{post['id']}",
+                            headers=get_headers()
+                        )
+
                         if response.status_code == 200:
                             st.success("Post deleted!")
                             st.rerun()
-                        else:
-                            st.error("Failed to delete post!")
+
+
+
+            # col1, col2 = st.columns([4, 1])
+            # with col1:
+            #     st.markdown(f"**{post['email']}** • {post['created_at'][:10]}")
+            # with col2:
+            #     if post.get('is_owner', False):
+            #         if st.button("🗑️", key=f"delete_{post['id']}", help="Delete post"):
+            #             # Delete the post
+            #             response = requests.delete(f"{host}/posts/{post['id']}", headers=get_headers())
+            #             if response.status_code == 200:
+            #                 st.success("Post deleted!")
+            #                 st.rerun()
+            #             else:
+            #                 st.error("Failed to delete post!")
 
             # Uniform media display with caption overlay
             # Main content layout
             media_col, comment_col = st.columns([1.3, 1])
 
+            # MEDIA SECTION
             # MEDIA SECTION
             with media_col:
 
@@ -190,8 +224,7 @@ def feed_page():
 
                     uniform_url = create_transformed_url(
                         post['url'],
-                        "",
-                        caption
+                        ""
                     )
 
                     st.image(uniform_url, width=320)
@@ -205,7 +238,143 @@ def feed_page():
 
                     st.video(uniform_video_url)
 
-                    st.caption(caption)
+                # Show caption below media
+                if caption:
+                    st.markdown(caption)
+
+                # Edit caption UI
+                if st.session_state.get(
+                    f"editing_post_{post['id']}",
+                    False
+                ):
+
+                    new_caption = st.text_area(
+                        "Edit Caption",
+                        value=caption,
+                        key=f"caption_{post['id']}"
+                    )
+
+                    col_save, col_cancel = st.columns(2)
+
+                    with col_save:
+                        if st.button(
+                            "Save",
+                            key=f"save_{post['id']}"
+                        ):
+                            st.write("SAVE CLICKED")
+
+                            response = requests.patch(
+                                f"{host}/posts/{post['id']}",
+                                headers=get_headers(),
+                                data={
+                                    "caption": new_caption
+                                }
+                            )
+                            st.write(response.status_code)
+                            st.write(response.text)
+                            st.write(f"{host}/posts/{post['id']}")
+
+                            if response.status_code == 200:
+
+                                st.success("Post updated!")
+
+                                st.session_state[
+                                    f"editing_post_{post['id']}"
+                                ] = False
+
+                                st.rerun()
+
+                            else:
+
+                                st.error("Failed to update post")
+
+                    with col_cancel:
+                        if st.button(
+                            "Cancel",
+                            key=f"cancel_{post['id']}"
+                        ):
+
+                            st.session_state[
+                                f"editing_post_{post['id']}"
+                            ] = False
+
+                            st.rerun()
+
+
+            # with media_col:
+
+            #     caption = post.get('caption', '')
+
+            #     if post['file_type'] == 'image':
+
+            #         uniform_url = create_transformed_url(
+            #             post['url'],
+            #             "",
+            #             caption
+            #         )
+
+            #         st.image(uniform_url, width=320)
+
+            #     else:
+
+            #         uniform_video_url = create_transformed_url(
+            #             post['url'],
+            #             "w-400,h-200,cm-pad_resize,bg-blurred"
+            #         )
+
+            #         st.video(uniform_video_url)
+
+            #         st.caption(caption)
+
+                
+            #     if st.session_state.get(
+            #         f"editing_post_{post['id']}",
+            #         False
+            #     ):
+
+            #         new_caption = st.text_area(
+            #             "Edit Caption",
+            #             value=post.get("caption", ""),
+            #             key=f"caption_{post['id']}"
+            #         )
+
+            #         col_save, col_cancel = st.columns(2)
+
+            #         with col_save:
+            #             if st.button(
+            #                 "Save",
+            #                 key=f"save_{post['id']}"
+            #             ):
+
+            #                 response = requests.patch(
+            #                     f"{host}/posts/{post['id']}",
+            #                     headers=get_headers(),
+            #                     data={
+            #                         "caption": new_caption
+            #                     }
+            #                 )
+
+            #                 if response.status_code == 200:
+            #                     st.success("Post updated!")
+            #                     st.session_state[
+            #                         f"editing_post_{post['id']}"
+            #                     ] = False
+            #                     st.rerun()
+
+            #                 else:
+            #                     st.error("Failed to update post")
+
+            #         with col_cancel:
+            #             if st.button(
+            #                 "Cancel",
+            #                 key=f"cancel_{post['id']}"
+            #             ):
+            #                 st.session_state[
+            #                     f"editing_post_{post['id']}"
+            #                 ] = False
+            #                 st.rerun()
+
+
 
                 # Likes section
                 likes_count = post.get("likes", 0)
