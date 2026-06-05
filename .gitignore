@@ -21,6 +21,7 @@ test.db
 venv/
 
 
-local.py
 
 .env
+.env.local
+
