@@ -1,8 +1,9 @@
-name: Deploy FastAPI
+name: FastAPI CI/CD
 
 on:
   push:
     branches:
+      - staging
       - master
 
 jobs:
@@ -11,30 +12,47 @@ jobs:
 
     env:
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-
       IMAGEKIT_PRIVATE_KEY: ${{ secrets.IMAGEKIT_PRIVATE_KEY }}
       IMAGEKIT_PUBLIC_KEY: ${{ secrets.IMAGEKIT_PUBLIC_KEY }}
       IMAGEKIT_URL_ENDPOINT: ${{ secrets.IMAGEKIT_URL_ENDPOINT }}
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
           pip install uv
           uv sync
 
-      - name: Run Tests
+      - name: Run tests
         run: |
           uv run pytest
 
+  create-pr:
+    if: github.ref == 'refs/heads/staging'
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: auto-pr-staging-master
+          base: master
+          title: "Merge staging into master"
+          body: |
+            Auto-generated PR from staging to master.
+          delete-branch: true
+
   deploy:
+    if: github.ref == 'refs/heads/master'
     needs: test
     runs-on: ubuntu-latest
 
@@ -54,5 +72,4 @@ jobs:
             git reset --hard origin/master
 
             docker compose up -d --build
-
             
