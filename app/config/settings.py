@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     
     # Groq API - Made Optional with None default
     GROQ_API_KEY: Optional[str] = Field(default=None, validation_alias="GROQ_API_KEY")
+
+    # HOST
+    HOST: str = Field(default="http://13.201.75.191")  # Production default
+
     
     # ✅ Pydantic V2: Use model_config instead of class Config
     model_config = ConfigDict(
@@ -41,6 +45,7 @@ class Settings(BaseSettings):
         case_sensitive=True,
         extra="ignore"  # Ignore extra fields from local.py
     )
+
     
     # ✅ Pydantic V2: Use field_validator instead of validator
     @field_validator("DB_POOL_SIZE")
@@ -71,3 +76,18 @@ settings = Settings()
 # print(f"   ENVIRONMENT: {settings.ENVIRONMENT}")
 # print(f"   DEBUG: {settings.DEBUG}")
 # print(f"   DATABASE_URL: {settings.DATABASE_URL[:50]}...")
+
+
+
+# Manually load and apply local.py if it exists
+try:
+    from .local import *  # Import local overrides
+    # Update settings with local values
+    for key, value in locals().items():
+        if key.isupper() and hasattr(settings, key):
+            setattr(settings, key, value)
+    print("✅ Loaded local.py overrides")
+except ImportError:
+    print("ℹ️ local.py not found, using base settings")
+
+
