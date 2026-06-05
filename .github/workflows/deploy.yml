@@ -33,23 +33,20 @@ jobs:
           uv run pytest
 
   create-pr:
-    if: github.ref == 'refs/heads/staging'
-    needs: test
-    runs-on: ubuntu-latest
+  if: github.ref == 'refs/heads/staging'
+  needs: test
+  runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: auto-pr-staging-master
-          base: master
-          title: "Merge staging into master"
-          body: |
-            Auto-generated PR from staging to master.
-          delete-branch: true
+  steps:
+    - name: Create Pull Request
+      uses: repo-sync/pull-request@v2
+      with:
+        source_branch: "staging"
+        destination_branch: "master"
+        pr_title: "Merge staging into master"
+        pr_body: "Auto-generated PR from staging."
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        
 
   deploy:
     if: github.ref == 'refs/heads/master'
