@@ -151,63 +151,35 @@ async def upload_file(
         file.file.close()
 
 
+@app.patch("/posts/{post_id}")
+async def update_post(
+    post_id: uuid.UUID,
+    caption: str = Form(...),
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_sync_session),
+):
+    result = await session.execute(
+        select(Post).where(
+            Post.id == post_id,
+            Post.user_id == user.id
+        )
+    )
 
+    post = result.scalar_one_or_none()
 
-# @app.post("/upload")
-# async def upload_file(
-#         file: UploadFile = File(...),
-#         caption: str = Form(...),
-#         user: User = Depends(current_active_user),
-#         session: AsyncSession = Depends(get_sync_session),
-# ):
-#     temp_file_path = None
+    if not post:
+        raise HTTPException(
+            status_code=404,
+            detail="Post not found"
+        )
 
+    post.caption = caption
 
-#     try:
-#         with tempfile.NamedTemporaryFile(
-#                 delete=False,
-#                 suffix=os.path.splitext(file.filename)[1]
-#         ) as temp_file:
-#             temp_file_path = temp_file.name
-#             shutil.copyfileobj(file.file, temp_file)
+    # await session.commit()
+    # await session.refresh(post)
 
-#         with open(temp_file_path, "rb") as f:
-#             upload_result = imagekit.files.upload(
-#                 file=f,
-#                 file_name=file.filename,
-#                 folder="feeds/",
-#                 tags=["backend-uploads"]
-#             )
-        
+    return post
 
-#         if upload_result is None:
-#             raise 
-        
-#         if upload_result and upload_result.url:
-#             post = Post(
-#                 user_id=user.id,
-#                 caption=caption,
-#                 url=upload_result.url,
-#                 file_type="video" if file.content_type.startswith("video/") else "image",
-#                 file_name=upload_result.name,
-#             )
-
-#             session.add(post)
-            
-#             # await session.commit()
-#             # await session.refresh(post)  # avoided this as session auto commits
-        
-#             return post
-
-#         raise HTTPException(status_code=400, detail="Upload failed")
-
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=str(e))
-
-#     finally:
-#         if temp_file_path and os.path.exists(temp_file_path):
-#             os.unlink(temp_file_path)
-#         file.file.close()
 
 
 @app.get("/feed", response_model=FeedResponseSchema)
@@ -225,28 +197,11 @@ async def get_feeds(session: AsyncSession = Depends(get_sync_session), user: Use
 
     post_data = []
     for post in posts:
-        # like_result = await session.execute(select(func.count(Like.id)).where(Like.post_id == post.id))
+        
         like_count = len(post.likes)
 
-        # comment_result = await session.execute(
-        #     select(Comment).where(
-        #         Comment.post_id == post.id
-        #     )
-        # )
-        # comments = comment_result.scalars().all()
-
-        # already_liked_result = await session.execute(
-        #     select(Like).where(
-        #         Like.post_id == post.id,
-        #         Like.user_id == user.id
-        #     )
-        # )
-        # is_liked = already_liked_result.scalars().first() is not None
         is_liked = any(like.user_id == user.id for like in post.likes)
 
-        # post_data.append({'id': post.id, 'user_id': str(user.id), 'caption': post.caption, 'url': post.url, 'file_type': post.file_type,
-        #                   'file_name': post.file_name, 'created_at': post.created_at.isoformat(), 'is_owner': post.user_id == user.id,
-        #                   'email': user_dict.get(post.user_id), 'likes': like_count, 'comments': serialized_comments, 'is_liked': is_liked})
         post_data.append(
             FeedPostSchema(
                 id=post.id,
@@ -434,41 +389,23 @@ async def remove_like(
 
 
 
-from fastapi import APIRouter
+# from fastapi import APIRouter
 from pydantic import BaseModel
 
-router = APIRouter()
-
-class ChatRequest(BaseModel):
-    message: str
-
-@router.post("/chat")
-async def chat(request: ChatRequest):
-
-    # Call your AI provider here
-    ai_response = "Hello from MajallaAI"
-
-    return {
-        "response": ai_response
-    }
-
-
-
-
 from app.services.ai_services import ask_ai
+
+# router = APIRouter()
 
 class ChatRequest(BaseModel):
     message: str
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
-
     response = ask_ai(request.message)
 
     return {
         "response": response
     }
-
 
 
 
