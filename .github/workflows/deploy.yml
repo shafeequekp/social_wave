@@ -37,15 +37,21 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+      pull-requests: write
+
     steps:
-      - name: Create Pull Request
-        uses: repo-sync/pull-request@v2
+      - uses: actions/checkout@v4
+
+      - name: Create PR
+        uses: peter-evans/create-pull-request@v7
         with:
-          source_branch: "staging"
-          destination_branch: "master"
-          pr_title: "Merge staging into master"
-          pr_body: "Auto-generated PR from staging."
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: auto/staging-to-master
+          title: "Merge staging into master"
+          body: "Auto-generated PR from staging."
+          base: master
 
 
   deploy:
