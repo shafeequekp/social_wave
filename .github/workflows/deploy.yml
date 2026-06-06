@@ -32,26 +32,29 @@ jobs:
         run: |
           uv run pytest
 
+
   create-pr:
     if: github.ref == 'refs/heads/staging'
     needs: test
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create PR
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: auto/staging-to-master
-          title: "Merge staging into master"
-          body: "Auto-generated PR from staging."
-          base: master
+      - name: Create PR from staging to master
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --base master \
+            --head staging \
+            --title "Merge staging into master" \
+            --body "Auto-generated PR from staging" \
+          || echo "PR already exists"
 
 
   deploy:
