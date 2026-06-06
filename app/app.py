@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from contextlib import asynccontextmanager
 # from imagekitio.models.UploadFileRequestOptions import UploadFileRequestOptions
@@ -14,18 +14,14 @@ import tempfile
 import time
 
 from app.schemas import PostCreate
-from app.db import Post, User, Comment, Like, get_sync_session
+from app.db import Post, User, Comment, Like, ChatHistory
+from app.dependencies import get_sync_session
 from app.images import imagekit
 from app.users import auth_backend, current_active_user, fastapi_users
-from app.schemas import UserCreate, UserRead, UserUpdate, FeedResponseSchema, FeedPostSchema
+from app.schemas import UserCreate, UserRead, UserUpdate, FeedResponseSchema, FeedPostSchema, ChatRequest, ChatHistoryListResponse
 from app.middlewares import LoggingMiddleware
+from app.services.ai_services import ask_ai
 from app.config.settings import settings
-
-# @asynccontextmanager
-# async def lifespan(app: FastAPI):
-#     # await create_db_and_tables()
-#     yield
-
 
 
 
@@ -183,7 +179,9 @@ async def update_post(
 
 
 @app.get("/feed", response_model=FeedResponseSchema)
-async def get_feeds(session: AsyncSession = Depends(get_sync_session), user: User = Depends(current_active_user)):
+async def get_feeds(session: AsyncSession = Depends(get_sync_session), 
+                    user: User = Depends(current_active_user)):
+    
     result = await session.execute(select(Post).options(
         selectinload(Post.comments),
         selectinload(Post.likes),
@@ -219,6 +217,7 @@ async def get_feeds(session: AsyncSession = Depends(get_sync_session), user: Use
             )
         )
     return {"posts": post_data}
+
 
 
 @app.delete("/posts/{post_id}")
@@ -387,21 +386,18 @@ async def remove_like(
 
 
 
-
-
-# from fastapi import APIRouter
-from pydantic import BaseModel
-
-from app.services.ai_services import ask_ai
-
-# router = APIRouter()
-
-class ChatRequest(BaseModel):
-    message: str
+from app.dependencies import get_db_raw
 
 @app.post("/chat")
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, 
+               user: User = Depends(current_active_user),
+               session: AsyncSession = Depends(get_db_raw)):
     response = ask_ai(request.message)
+
+    history = ChatHistory(question=request.message, answer=response, user_id=user.id)
+    session.add(history)
+    await session.commit()
+    await session.refresh(history)
 
     return {
         "response": response
@@ -410,59 +406,17 @@ async def chat(request: ChatRequest):
 
 
 
+@app.get("/chat-history", response_model=ChatHistoryListResponse)
+async def chat_history(user: User = Depends(current_active_user), 
+                       session: AsyncSession = Depends(get_sync_session)
+                       ):
+    
+    result = await session.execute(select(
+        ChatHistory).where(
+            ChatHistory.user_id == user.id).order_by(
+                ChatHistory.created_at.desc()))
 
+    histories = result.scalars().all()
 
-
-
-
-
-
-
-
-# @app.put("/posts/{post_id}")
-# async def update_post(
-#         post_id: str, session: AsyncSession = Depends(get_sync_session),
-#         user: User = Depends(current_active_user),
-#         caption: str = Form(...), file: UploadFile = File(...),
-# ):
-#     try:
-#         post_id = uuid.UUID(post_id)
-#
-#         result = await session.execute(select(Post).where(Post.id == post_id))
-#         post_obj = result.scalars().one()
-#         if post_obj.user_id != user.id:
-#             raise HTTPException(status_code=400, detail="User not allowed")
-#
-#         current_file = post_obj.url
-#         temp_file_path = None
-#         try:
-#             with tempfile.NamedTemporaryFile(
-#                 delete=False,
-#                 suffix=os.path.splitext(file.filename)[1]) as temp_file:
-#                 temp_file_path = temp_file.name
-#                 shutil.copyfileobj(file.file, temp_file)
-#
-#             upload_result = imagekit.files.upload(
-#                 file=temp_file,
-#                 file_name=file.filename,
-#                 folder="feeds/",
-#                 tags=["backend-uploads"]
-#             )
-#             if upload_result and upload_result.url:
-#                 post_obj.url = upload_result.url
-#         except:
-#             raise HTTPException(status_code=404, detail="File cannot be uploaded")
-#
-#         post_obj.caption = caption
-#
-#         await session.commit()
-#         await session.refresh(post_obj)
-#
-#         return {"success": True, "message": "Updated successfully"}
-#     except Exception:
-#         raise HTTPException(status_code=404, detail="Post not found")
-#     finally:
-#         if temp_file_path and os.path.exists(temp_file_path):
-#             os.unlink(temp_file_path)
-
+    return {'histories': histories, 'status': 200}
 

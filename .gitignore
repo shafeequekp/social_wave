@@ -25,3 +25,6 @@ venv/
 .env
 .env.local
 
+# Optional local-only compose overrides (auto-merged by Docker if present)
+docker-compose.override.yml
+

@@ -34,8 +34,10 @@ class Settings(BaseSettings):
     # Groq API - Made Optional with None default
     GROQ_API_KEY: Optional[str] = Field(default=None, validation_alias="GROQ_API_KEY")
 
-    # HOST
-    HOST: str = Field(default="http://localhost:8000")  # default local host
+    # HOST - public API URL (production / browser-facing)
+    HOST: str = Field(default="http://localhost:8000")
+    # Optional override for server-side clients (e.g. Streamlit in Docker)
+    API_HOST: Optional[str] = Field(default=None, validation_alias="API_HOST")
 
     
     # ✅ Pydantic V2: Use model_config instead of class Config
@@ -67,6 +69,15 @@ class Settings(BaseSettings):
             "pool_pre_ping": self.DB_POOL_PRE_PING,
             "echo": self.DB_ECHO,
         }
+
+    @property
+    def api_base_url(self) -> str:
+        """Base URL for backend API calls from the frontend."""
+        if self.API_HOST:
+            return self.API_HOST
+        if os.path.exists("/.dockerenv"):
+            return "http://api:8000"
+        return self.HOST
 
 # Create settings instance
 settings = Settings()
