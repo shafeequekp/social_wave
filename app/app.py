@@ -304,7 +304,7 @@ async def get_likes(
 
 @app.post("/like")
 async def add_like(
-    post_id: str,
+    post_id: uuid.UUID,
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_sync_session)
 ):
