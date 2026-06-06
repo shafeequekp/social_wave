@@ -55,3 +55,26 @@ class FeedPostSchema(BaseModel):
 
 class FeedResponseSchema(BaseModel):
     posts: list[FeedPostSchema]
+
+
+
+class ChatRequest(BaseModel):
+    message: str
+
+    
+
+class ChatHistorySchema(BaseModel):
+    id : int
+    question: str
+    answer: str
+    user_id: UUID
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ChatHistoryListResponse(BaseModel):
+    histories: list[ChatHistorySchema]
+    status: int
+

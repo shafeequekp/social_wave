@@ -8,7 +8,7 @@ import io
 from unittest.mock import AsyncMock, Mock, patch
 
 from app.app import app  # Your FastAPI app
-from app.db import get_sync_session
+from app.dependencies import get_sync_session
 from app.db import User
 from app.users import current_active_user
 

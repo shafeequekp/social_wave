@@ -2,12 +2,19 @@ import streamlit as st
 import requests
 import base64
 import urllib.parse
+from requests.exceptions import ConnectionError, RequestException
 
 from streamlit_cookies_manager import EncryptedCookieManager
 
 from app.config.settings import settings
 
-host = settings.HOST
+host = settings.api_base_url
+REQUEST_TIMEOUT = 10
+
+
+def api_request(method: str, url: str, **kwargs):
+    kwargs.setdefault("timeout", REQUEST_TIMEOUT)
+    return requests.request(method, url, **kwargs)
 
 
 st.set_page_config(page_title="Simple Social", layout="wide")
@@ -30,20 +37,29 @@ if 'user' not in st.session_state:
 
 # Restore user from token
 if st.session_state.token and st.session_state.user is None:
+    try:
+        response = api_request(
+            "GET",
+            f"{host}/users/me",
+            headers={
+                "Authorization": f"Bearer {st.session_state.token}"
+            },
+        )
 
-    response = requests.get(
-        f"{host}/users/me",
-        headers={
-            "Authorization": f"Bearer {st.session_state.token}"
-        }
-    )
+        if response.status_code == 200:
+            st.session_state.user = response.json()
+        else:
+            st.session_state.token = None
+            cookies["token"] = ""
+            cookies.save()
+    except ConnectionError:
+        st.warning("API is starting up. Please refresh in a moment.")
+        st.stop()
+    except RequestException as exc:
+        st.error(f"Could not reach API: {exc}")
+        st.stop()
 
-    if response.status_code == 200:
-        st.session_state.user = response.json()
-    else:
-        st.session_state.token = None
-        cookies["token"] = ""
-        cookies.save()
+
 
 
 def get_headers():
@@ -300,82 +316,6 @@ def feed_page():
 
                             st.rerun()
 
-
-            # with media_col:
-
-            #     caption = post.get('caption', '')
-
-            #     if post['file_type'] == 'image':
-
-            #         uniform_url = create_transformed_url(
-            #             post['url'],
-            #             "",
-            #             caption
-            #         )
-
-            #         st.image(uniform_url, width=320)
-
-            #     else:
-
-            #         uniform_video_url = create_transformed_url(
-            #             post['url'],
-            #             "w-400,h-200,cm-pad_resize,bg-blurred"
-            #         )
-
-            #         st.video(uniform_video_url)
-
-            #         st.caption(caption)
-
-                
-            #     if st.session_state.get(
-            #         f"editing_post_{post['id']}",
-            #         False
-            #     ):
-
-            #         new_caption = st.text_area(
-            #             "Edit Caption",
-            #             value=post.get("caption", ""),
-            #             key=f"caption_{post['id']}"
-            #         )
-
-            #         col_save, col_cancel = st.columns(2)
-
-            #         with col_save:
-            #             if st.button(
-            #                 "Save",
-            #                 key=f"save_{post['id']}"
-            #             ):
-
-            #                 response = requests.patch(
-            #                     f"{host}/posts/{post['id']}",
-            #                     headers=get_headers(),
-            #                     data={
-            #                         "caption": new_caption
-            #                     }
-            #                 )
-
-            #                 if response.status_code == 200:
-            #                     st.success("Post updated!")
-            #                     st.session_state[
-            #                         f"editing_post_{post['id']}"
-            #                     ] = False
-            #                     st.rerun()
-
-            #                 else:
-            #                     st.error("Failed to update post")
-
-            #         with col_cancel:
-            #             if st.button(
-            #                 "Cancel",
-            #                 key=f"cancel_{post['id']}"
-            #             ):
-            #                 st.session_state[
-            #                     f"editing_post_{post['id']}"
-            #                 ] = False
-            #                 st.rerun()
-
-
-
                 # Likes section
                 likes_count = post.get("likes", 0)
                 is_liked = post.get("is_liked", False)
@@ -498,15 +438,160 @@ def feed_page():
 
 
 
+
+# def chatbot_page():
+
+#     st.title("🤖 MajallaAI")
+
+#     st.caption("Your AI assistant")
+
+#     # Store chat history
+#     if "chat_messages" not in st.session_state:
+#         st.session_state.chat_messages = []
+
+#     # Display messages
+#     for message in st.session_state.chat_messages:
+
+#         with st.chat_message(message["role"]):
+#             st.markdown(message["content"])
+
+#     # Chat input
+#     prompt = st.chat_input("Ask MajallaAI anything...")
+
+#     if prompt:
+
+#         # Add user message
+#         st.session_state.chat_messages.append(
+#             {
+#                 "role": "user",
+#                 "content": prompt
+#             }
+#         )
+
+#         with st.chat_message("user"):
+#             st.markdown(prompt)
+
+#         # AI response
+#         with st.chat_message("assistant"):
+
+#             with st.spinner("MajallaAI is thinking..."):
+
+#                 try:
+
+#                     response = requests.post(
+#                         f"{host}/chat",
+#                         json={
+#                             "message": prompt
+#                         },
+#                         headers=get_headers()
+#                     )
+
+#                     if response.status_code == 200:
+
+#                         ai_response = response.json().get(
+#                             "response",
+#                             "No response"
+#                         )
+
+#                     else:
+
+#                         ai_response = "Failed to get response from AI server."
+
+#                 except Exception as e:
+
+#                     ai_response = f"Error: {str(e)}"
+
+#                 st.markdown(ai_response)
+
+#         # Save assistant message
+#         st.session_state.chat_messages.append(
+#             {
+#                 "role": "assistant",
+#                 "content": ai_response
+#             }
+#         )
+
+
+
+def get_chat_history():
+    response = requests.get(
+        f"{host}/chat-history",
+        headers=get_headers()
+    )
+
+    if response.status_code == 200:
+        return response.json().get("histories", [])
+
+    return []
+
+
+
 def chatbot_page():
 
-    st.title("🤖 MajallaAI")
-
-    st.caption("Your AI assistant")
-
-    # Store chat history
+    # Initialize states
     if "chat_messages" not in st.session_state:
         st.session_state.chat_messages = []
+
+    if "selected_history_id" not in st.session_state:
+        st.session_state.selected_history_id = None
+
+    with st.sidebar:
+
+        if st.button("➕ New Chat", use_container_width=True):
+            st.session_state.chat_messages = []
+            st.session_state.selected_history_id = None
+            st.rerun()
+
+        st.divider()
+
+        st.markdown("### Chat History")
+
+    # Header
+  
+    st.title("🤖 MajallaAI")
+    st.caption("Your AI assistant")
+
+    # Always show history in sidebar
+    with st.sidebar:
+
+        # st.markdown("## 📜 Chat History")
+
+        histories = get_chat_history()
+
+        if histories:
+
+            for item in histories:
+
+                title = item["question"][:30]
+
+                if len(item["question"]) > 30:
+                    title += "..."
+
+                if st.button(
+                    title,
+                    key=f"history_{item['id']}",
+                    use_container_width=True
+                ):
+
+                    st.session_state.chat_messages = [
+                        {
+                            "role": "user",
+                            "content": item["question"]
+                        },
+                        {
+                            "role": "assistant",
+                            "content": item["answer"]
+                        }
+                    ]
+
+                    st.session_state.selected_history_id = item["id"]
+
+                    st.rerun()
+
+        else:
+            st.info("No chat history found")
+
+
 
     # Display messages
     for message in st.session_state.chat_messages:
@@ -514,12 +599,13 @@ def chatbot_page():
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Chat input
-    prompt = st.chat_input("Ask MajallaAI anything...")
+    # Input
+    prompt = st.chat_input(
+        "Ask MajallaAI anything..."
+    )
 
     if prompt:
 
-        # Add user message
         st.session_state.chat_messages.append(
             {
                 "role": "user",
@@ -530,10 +616,11 @@ def chatbot_page():
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # AI response
         with st.chat_message("assistant"):
 
-            with st.spinner("MajallaAI is thinking..."):
+            with st.spinner(
+                "MajallaAI is thinking..."
+            ):
 
                 try:
 
@@ -554,22 +641,23 @@ def chatbot_page():
 
                     else:
 
-                        ai_response = "Failed to get response from AI server."
+                        ai_response = (
+                            "Failed to get response "
+                            "from AI server."
+                        )
 
                 except Exception as e:
 
-                    ai_response = f"Error: {str(e)}"
+                    ai_response = f"Error: {e}"
 
                 st.markdown(ai_response)
 
-        # Save assistant message
         st.session_state.chat_messages.append(
             {
                 "role": "assistant",
                 "content": ai_response
             }
         )
-
 
 
 

@@ -1,16 +1,22 @@
 from logging.config import fileConfig
+import time
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import create_engine, engine_from_config, pool, text
 
 from alembic import context
 
-from app.db import Base, User, Post, Like, Comment
+from app.db import Base, User, Post, Like, Comment, ChatHistory
+from app.config.settings import settings
 
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+sync_url = settings.DATABASE_URL.replace(
+    "postgresql+asyncpg://", "postgresql+psycopg2://"
+)
+config.set_main_option("sqlalchemy.url", sync_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -27,6 +33,20 @@ target_metadata = Base.metadata
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
+
+
+def wait_for_database(url: str, max_retries: int = 30, retry_interval: int = 2) -> None:
+    for attempt in range(1, max_retries + 1):
+        try:
+            engine = create_engine(url, pool_pre_ping=True)
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            engine.dispose()
+            return
+        except Exception:
+            if attempt == max_retries:
+                raise
+            time.sleep(retry_interval)
 
 
 def run_migrations_offline() -> None:
@@ -60,6 +80,8 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    if "@db:" in sync_url or "@db/" in sync_url:
+        wait_for_database(sync_url)
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
