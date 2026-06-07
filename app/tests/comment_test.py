@@ -27,9 +27,6 @@ async def setup_database():
         await conn.run_sync(Base.metadata.drop_all)
 
 
-
-
-
 @pytest_asyncio.fixture
 async def test_user(async_session):
     user = User(
@@ -86,17 +83,6 @@ async def auth_user(async_session, test_user):
     yield test_user
 
 
-# @pytest_asyncio.fixture
-# async def override_session(async_session):
-
-#     async def override_get_session():
-#         yield async_session
-
-#     app.dependency_overrides[get_sync_session] = override_get_session
-
-#     yield
-
-
 @pytest_asyncio.fixture
 async def test_post(async_session, auth_user):
     # Create post
@@ -112,66 +98,16 @@ async def test_post(async_session, auth_user):
 
 
 @pytest.mark.asyncio
-async def test_add_like_success(client, test_post):
+async def test_comment_post(client, test_post):
 
     response = await client.post(
-        "/like",
-        params={"post_id": str(test_post.id)}
+        "/comments",
+        params={"text": "sample comment",
+                "post_id": str(test_post.id)}
     )
 
     assert response.status_code == 200
-
-    data = response.json()
-
-    assert data["success"] is True
-    assert "like_id" in data
-
-
-@pytest.mark.asyncio
-async def test_unlike_post(client, test_post):
-
-    response = await client.post(
-        "/like",
-        params={"post_id": str(test_post.id)}
-    )
-
-    assert response.status_code == 200
-
-    response = await client.post(
-        "/unlike",
-        params={"post_id": str(test_post.id)}
-    )
-    assert response.status_code == 200
-    
     data = response.json()
     assert data["success"] is True
-    assert data["message"] == "Like removed successfully"
-
-
-
-
-@pytest.mark.asyncio
-async def test_invalid_unlike(client, test_post):
-    
-
-    response = await client.post(
-        "/unlike",
-        params={"post_id": str(test_post.id)}
-    )
-    
-    assert response.status_code == 400
-    data = response.json()
-    assert data["detail"] == "User has not liked this post"
-
-
-@pytest.mark.asyncio
-async def test_unlike_missing_post(client, auth_user):
-
-    response = await client.post(
-        "/unlike",
-    )
-    assert response.status_code == 422   # pydantic Validation error
-
-
-
+    assert data["message"] == "comment added successfully"
 
