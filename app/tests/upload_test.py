@@ -1,165 +1,222 @@
 # app/tests/upload_test.py
-import pytest
-from fastapi.testclient import TestClient
-from fastapi import HTTPException
 
-from pathlib import Path
 import io
-from unittest.mock import AsyncMock, Mock, patch
+import pytest
+import pytest_asyncio
 
-from app.app import app  # Your FastAPI app
-from app.dependencies import get_sync_session
+from httpx import AsyncClient, ASGITransport
+from unittest.mock import AsyncMock, Mock, patch
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
+
+from app.app import app
 from app.db import User
+from app.dependencies import get_sync_session
 from app.users import current_active_user
 
 
+# ----------------------------
+# Client Fixture
+# ----------------------------
+
+@pytest_asyncio.fixture
+async def client():
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test"
+    ) as client:
+        yield client
 
 
-from uuid import uuid4
+# ----------------------------
+# Mock Session Fixture
+# ----------------------------
+
+@pytest.fixture
+def mock_session():
+    session = Mock()
+
+    session.added_objects = []
+    session.committed = False
+
+    def add_side_effect(obj):
+        session.added_objects.append(obj)
+
+    session.add = Mock(side_effect=add_side_effect)
+
+    async def commit_side_effect():
+        session.committed = True
+
+    session.commit = AsyncMock(side_effect=commit_side_effect)
+    session.refresh = AsyncMock()
+
+    async def execute_side_effect(query):
+        result = AsyncMock()
+        scalars = Mock()
+        scalars.first = Mock(return_value=None)
+        result.scalars = Mock(return_value=scalars)
+        return result
+
+    session.execute = AsyncMock(side_effect=execute_side_effect)
+
+    return session
 
 
-
-
-# Create mock session - DON'T use AsyncMock for add()
-mock_session = Mock()  # Use Mock() instead of AsyncMock()
-mock_session.added_objects = []
-mock_session.committed = False
-
-# Define the add function
-def add_side_effect(obj):
-    mock_session.added_objects.append(obj)
-    print(f"✅ Added to mock session: {obj.caption if hasattr(obj, 'caption') else obj}")
-
-# Set up the mock - use regular Mock for add()
-mock_session.add = Mock(side_effect=add_side_effect)
-
-# Use AsyncMock for async methods
-async def commit_side_effect():
-    mock_session.committed = True
-    print("✅ Commit called")
-
-mock_session.commit = AsyncMock(side_effect=commit_side_effect)
-mock_session.refresh = AsyncMock()
-
-# Mock execute
-async def execute_side_effect(query):
-    mock_result = AsyncMock()
-    mock_scalars = Mock()
-    mock_scalars.first = Mock(return_value=None)
-    mock_result.scalars = Mock(return_value=mock_scalars)
-    return mock_result
-
-mock_session.execute = AsyncMock(side_effect=execute_side_effect)
+# ----------------------------
+# Dependency Override Fixture
+# ----------------------------
 
 @pytest.fixture(autouse=True)
-def override_deps():
+def clear_overrides():
+    yield
+    app.dependency_overrides.clear()
+
+
+# @pytest.fixture
+# def mock_session():
+#     session = Mock()
+
+#     session.added_objects = []
+
+#     def add_side_effect(obj):
+#         session.added_objects.append(obj)
+
+#     session.add = Mock(side_effect=add_side_effect)
+#     session.commit = AsyncMock()
+#     session.refresh = AsyncMock()
+#     session.execute = AsyncMock()
+
+#     return session
+
+
+@pytest.fixture(autouse=True)
+def override_deps(mock_session):
+
     async def override_get_db():
         yield mock_session
-    
-    app.dependency_overrides[get_sync_session] = override_get_db
-    
-    mock_user = Mock()
+
+    mock_user = Mock(spec=User)
     mock_user.id = "123e4567-e89b-12d3-a456-426614174000"
+
+    app.dependency_overrides[get_sync_session] = override_get_db
     app.dependency_overrides[current_active_user] = lambda: mock_user
-    
+
     yield
-    
-    app.dependency_overrides.clear()
-    # Reset
-    mock_session.added_objects = []
-    mock_session.committed = False
-    mock_session.add.reset_mock()
-    mock_session.commit.reset_mock()
+
+# ----------------------------
+# Upload Fixtures
+# ----------------------------
+
+@pytest.fixture
+def image_file():
+    return (
+        "test.jpg",
+        io.BytesIO(b"fake image content"),
+        "image/jpeg"
+    )
 
 
 @pytest.fixture
+def video_file():
+    return (
+        "test.mp4",
+        io.BytesIO(b"fake video content"),
+        "video/mp4"
+    )
+
+# ----------------------------
+# ImageKit Fixture
+# ----------------------------
+
+@pytest.fixture
 def mock_imagekit():
-    with patch('app.app.imagekit.files.upload') as mock:
-        mock_result = Mock()
-        mock_result.url = "https://ik.imagekit.io/test/image.jpg"
-        mock_result.name = "test_image.jpg"
-        mock.return_value = mock_result
+    with patch("app.app.imagekit.files.upload") as mock:
+        result = Mock()
+        result.url = "https://ik.imagekit.io/test/image.jpg"
+        result.name = "test_image.jpg"
+
+        mock.return_value = result
+
         yield mock
 
-def test_upload_image(mock_imagekit):
-    client = TestClient(app)
-    
-    test_image = io.BytesIO(b"fake content")
-    test_image.seek(0)
-    
-    files = {"file": ("test.jpg", test_image, "image/jpeg")}
-    data = {"caption": "Test caption"}
-    
-    response = client.post("/upload", files=files, data=data)
-    
-    print(f"\n=== Test Results ===")
-    print(f"Status: {response.status_code}")
-    print(f"Response: {response.text}")
-    print(f"Mock add called: {mock_session.add.called}")
-    print(f"Added objects count: {len(mock_session.added_objects)}")
-    
+
+# ----------------------------
+# Tests
+# ----------------------------
+
+@pytest.mark.asyncio
+async def test_upload_image(
+    client,
+    mock_session,
+    mock_imagekit,
+    image_file
+):
+    response = await client.post(
+        "/upload",
+        files={"file": image_file},
+        data={"caption": "Test caption"}
+    )
+
     assert response.status_code == 200
+
     mock_session.add.assert_called_once()
-    assert len(mock_session.added_objects) == 1
-    
+
     added_post = mock_session.added_objects[0]
+
     assert added_post.caption == "Test caption"
     assert added_post.file_type == "image"
 
 
+@pytest.mark.asyncio
+async def test_upload_video(
+    client,
+    mock_imagekit,
+    video_file
+):
+    response = await client.post(
+        "/upload",
+        files={"file": video_file},
+        data={"caption": "Video caption"}
+    )
 
-
-
-def test_upload_video(mock_imagekit):
-    """Test successful video upload"""
-    client = TestClient(app)
-    
-    # Create a test video file
-    test_video = io.BytesIO()
-    test_video.write(b"fake video content")
-    test_video.seek(0)
-    
-    # Prepare files and form data
-    files = {
-        "file": ("test_video.mp4", test_video, "video/mp4")
-    }
-    data = {
-        "caption": "Test video caption"
-    }
-    
-    # Make request
-    response = client.post("/upload", files=files, data=data)
-    
-    # Assert response
     assert response.status_code == 200
-    response_data = response.json()
-    assert response_data["file_type"] == "video"
-    assert response_data["caption"] == "Test video caption"
 
-def test_upload_missing_file():
-    """Test upload without file - should fail"""
-    client = TestClient(app)
-    
-    data = {"caption": "Test caption"}
-    response = client.post("/upload", data=data)
-    
-    assert response.status_code == 422  # Validation error
+    data = response.json()
 
-def test_upload_missing_caption():
-    """Test upload without caption - should fail"""
-    client = TestClient(app)
-    
-    test_image = io.BytesIO(b"fake content")
-    files = {"file": ("test.jpg", test_image, "image/jpeg")}
-    
-    response = client.post("/upload", files=files)
-    
-    assert response.status_code == 422  # Validation error
+    assert data["file_type"] == "video"
+    assert data["caption"] == "Video caption"
 
 
+@pytest.mark.asyncio
+async def test_upload_missing_file(client):
+
+    response = await client.post(
+        "/upload",
+        data={"caption": "Test"}
+    )
+
+    assert response.status_code == 422
 
 
-def test_upload_without_auth():
+@pytest.mark.asyncio
+async def test_upload_missing_caption(
+    client,
+    image_file
+):
+    response = await client.post(
+        "/upload",
+        files={"file": image_file}
+    )
+
+    assert response.status_code == 422
+
+
+
+@pytest.mark.asyncio
+async def test_upload_without_auth(
+    client,
+    image_file
+):
     async def unauthorized_user():
         raise HTTPException(
             status_code=401,
@@ -168,55 +225,50 @@ def test_upload_without_auth():
 
     app.dependency_overrides[current_active_user] = unauthorized_user
 
-    client = TestClient(app)
-
-    test_image = io.BytesIO(b"fake content")
-    files = {"file": ("test.jpg", test_image, "image/jpeg")}
-    data = {"caption": "Test"}
-
-    response = client.post("/upload", files=files, data=data)
+    response = await client.post(
+        "/upload",
+        files={"file": image_file},
+        data={"caption": "Test"}
+    )
 
     assert response.status_code == 401
 
-    # Restore overrides for other tests
-    # pytest.fail("Need to restore overrides")  # Or handle properly
+@pytest.mark.asyncio
+async def test_upload_imagekit_failure(
+    client,
+    image_file
+):
+    with patch("app.app.imagekit.files.upload") as mock_upload:
+        mock_upload.return_value = None
+
+        response = await client.post(
+            "/upload",
+            files={"file": image_file},
+            data={"caption": "Test"}
+        )
+
+        assert response.status_code == 400
 
 
+@pytest.mark.asyncio
+async def test_upload_exception_handling(
+    client,
+    image_file
+):
+    with patch("app.app.imagekit.files.upload") as mock_upload:
+        mock_upload.side_effect = Exception("Network error")
 
-@patch('app.app.imagekit.files.upload')
-def test_upload_imagekit_failure(mock_upload):
-    mock_upload.return_value = None
+        response = await client.post(
+            "/upload",
+            files={"file": image_file},
+            data={"caption": "Test"}
+        )
 
-    client = TestClient(app, raise_server_exceptions=False)
+        assert response.status_code == 500
 
-    test_image = io.BytesIO(b"fake content")
-    files = {"file": ("test.jpg", test_image, "image/jpeg")}
-    data = {"caption": "Test"}
+        data = response.json()
 
-    response = client.post("/upload", files=files, data=data)
+        assert data["detail"] == "Network error"
 
-    print(response.status_code)
-    print(response.text)
-
-    assert response.status_code == 400
-
-
-
-@patch('app.app.imagekit.files.upload')
-def test_upload_exception_handling(mock_upload):
-    """Test exception handling during upload"""
-    # Mock ImageKit to raise an exception
-    mock_upload.side_effect = Exception("Network error")
-    
-    client = TestClient(app)
-    
-    test_image = io.BytesIO(b"fake content")
-    files = {"file": ("test.jpg", test_image, "image/jpeg")}
-    data = {"caption": "Test"}
-    
-    response = client.post("/upload", files=files, data=data)
-    
-    assert response.status_code == 500
-    assert "Network error" in response.json()["detail"]
-
+        
 

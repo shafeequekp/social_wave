@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from fastapi_users import schemas
 
 from uuid import UUID
@@ -31,9 +31,8 @@ class CommentSchema(BaseModel):
     user_id: UUID
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
+    
 
 class FeedPostSchema(BaseModel):
     id: UUID
@@ -49,8 +48,7 @@ class FeedPostSchema(BaseModel):
     comments: list[CommentSchema]
     is_liked: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class FeedResponseSchema(BaseModel):
@@ -70,8 +68,7 @@ class ChatHistorySchema(BaseModel):
     user_id: UUID
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ChatHistoryListResponse(BaseModel):
